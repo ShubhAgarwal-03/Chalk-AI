@@ -1,0 +1,17 @@
+{
+  "name": "chalk-backend",
+  "version": "0.1.0",
+  "description": "CHALK relay server - bridges browser audio/WS to a live voice+tool-calling LLM provider (Gemini Live by default).",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test:gemini": "node scripts/test-gemini-live.js"
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.0",
+    "dotenv": "^16.4.5",
+    "ws": "^8.18.0"
+  }
+}
