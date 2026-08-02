@@ -17,6 +17,7 @@ if (!apiKey) {
   console.error('Missing GEMINI_API_KEY. Copy .env.example to .env and fill it in.');
   process.exit(1);
 }
+console.log('key length:', apiKey.length, 'starts with:', apiKey.slice(0, 6), 'ends with:', apiKey.slice(-4));
 
 const ai = new GoogleGenAI({ apiKey });
 
