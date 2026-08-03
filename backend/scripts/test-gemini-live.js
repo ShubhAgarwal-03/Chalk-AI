@@ -1,8 +1,9 @@
 /**
  * Standalone sanity check — confirms your GEMINI_API_KEY can open a Live
  * API session AND that function calling works, before we build the full
- * relay on top of it. No audio, no browser — just text in, text/tool-call
- * out over the same Live connection type the real app uses.
+ * relay on top of it. No browser needed — just this model's real output
+ * (audio) plus a text transcript of it, over the same Live connection
+ * type the real app uses.
  *
  * Run: npm run test:gemini   (from backend/, after `cp .env.example .env`
  * and filling in GEMINI_API_KEY)
@@ -17,7 +18,6 @@ if (!apiKey) {
   console.error('Missing GEMINI_API_KEY. Copy .env.example to .env and fill it in.');
   process.exit(1);
 }
-
 
 console.log('key length:', apiKey.length, 'starts with:', apiKey.slice(0, 6), 'ends with:', apiKey.slice(-4));
 
@@ -47,7 +47,8 @@ async function main() {
   const session = await ai.live.connect({
     model,
     config: {
-      responseModalities: [Modality.TEXT], // text only for this quick check — no audio setup needed
+      responseModalities: [Modality.AUDIO], // this model only supports AUDIO output, not TEXT
+      outputAudioTranscription: {}, // ask for a text transcript of the audio too, so we can print something readable
       tools: [{ functionDeclarations: [draw_shape] }],
     },
     callbacks: {
@@ -87,11 +88,19 @@ async function main() {
 
     if (message.serverContent?.modelTurn?.parts) {
       for (const part of message.serverContent.modelTurn.parts) {
+        if (part.inlineData?.data) {
+          gotAudioOrText = true;
+          console.log(`✓ Received audio chunk (${part.inlineData.data.length} base64 chars)`);
+        }
         if (part.text) {
           gotAudioOrText = true;
           console.log('✓ Model said:', part.text);
         }
       }
+    }
+
+    if (message.serverContent?.outputTranscription?.text) {
+      console.log('✓ Transcript:', message.serverContent.outputTranscription.text);
     }
 
     if (message.serverContent?.turnComplete) {
@@ -104,12 +113,12 @@ async function main() {
   console.log('\n--- Result ---');
   console.log('Live session opened:', true);
   console.log('Tool calling worked:', toolWasCalled);
-  console.log('Got a spoken/text response:', gotAudioOrText);
+  console.log('Got audio/transcript back:', gotAudioOrText);
 
   if (toolWasCalled && gotAudioOrText) {
     console.log('\n✅ Your key is good to go for the full backend.');
   } else {
-    console.log('\n⚠️  Connected, but did not see both a tool call and a response — rerun, or check the model name / tool schema.');
+    console.log('\n⚠️  Connected, but did not see both a tool call and audio — rerun, or check the model name / tool schema.');
   }
 
   process.exit(0);
