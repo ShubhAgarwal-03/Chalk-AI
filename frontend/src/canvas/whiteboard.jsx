@@ -9,44 +9,40 @@ const DEFAULT_COLOR = '#1e293b';
 
 export default function Whiteboard({ elements }) {
   const containerRef = useRef(null);
-  const [size, setSize] = useState(600);
+  const [box, setBox] = useState({ width: 600, height: 600 });
 
   useEffect(() => {
     if (!containerRef.current) return;
     const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect?.width;
-      if (width) setSize(Math.min(width, 900));
+      const rect = entries[0]?.contentRect;
+      if (rect) setBox({ width: rect.width, height: rect.height });
     });
     observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
 
+  // Container is a full flexible rect (sized by CanvasCard.jsx), not a
+  // fixed square — scale the fixed 1000x1000 logical drawing space to fit
+  // and center it inside whatever space is available.
+  const size = Math.max(Math.min(box.width, box.height), 1);
   const scale = size / CANVAS_UNITS;
+  const offsetX = (box.width - size) / 2;
+  const offsetY = (box.height - size) / 2;
   const items = Object.values(elements);
 
   return (
-    <div
-      ref={containerRef}
-      style={{
-        position: 'relative',
-        width: '100%',
-        aspectRatio: '1 / 1',
-        maxWidth: 900,
-        background: '#fdfdfb',
-        border: '1px solid #ddd',
-        borderRadius: 8,
-        overflow: 'hidden',
-      }}
-    >
-      <Stage width={size} height={size}>
-        <Layer>{items.map((el) => renderElement(el, scale))}</Layer>
+    <div ref={containerRef} className="whiteboard">
+      <Stage width={box.width} height={box.height}>
+        <Layer x={offsetX} y={offsetY}>{items.map((el) => renderElement(el, scale))}</Layer>
       </Stage>
 
-      {items
-        .filter((el) => el.type === 'draw_equation')
-        .map((el) => (
-          <Equation key={el.id} latex={el.latex} x={el.x} y={el.y} fontSize={el.fontSize} scale={scale} />
-        ))}
+      <div style={{ position: 'absolute', left: offsetX, top: offsetY, width: size, height: size, pointerEvents: 'none' }}>
+        {items
+          .filter((el) => el.type === 'draw_equation')
+          .map((el) => (
+            <Equation key={el.id} latex={el.latex} x={el.x} y={el.y} fontSize={el.fontSize} scale={scale} />
+          ))}
+      </div>
     </div>
   );
 }
