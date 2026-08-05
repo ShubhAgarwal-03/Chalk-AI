@@ -222,6 +222,18 @@ export const DRAW_TOOLS = [
     },
   },
   {
+  name: 'set_topic',
+  description:
+    'Set a short display name for what you are currently teaching, shown in the UI header. Call this once, early, whenever the topic changes — right after (or alongside) a clear_canvas when moving to a genuinely new topic. Do not call it again for follow-up questions within the same topic.',
+  parameters: {
+    type: 'object',
+    properties: {
+      topic: { type: 'string', description: 'Short topic name, 2-6 words, e.g. "Pythagorean Theorem", "Balancing Chemical Equations", "Cell Respiration".' },
+    },
+    required: ['topic'],
+  },
+},
+  {
     name: 'clear_canvas',
     description:
       'Clear the whiteboard. Pass specific ids to remove just those elements, or omit ids to clear everything. Call this as your FIRST action whenever the student moves to a new question or topic that is not a direct continuation of what is currently drawn.',

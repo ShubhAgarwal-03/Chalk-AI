@@ -9,7 +9,11 @@ export default function IdleOverlay({ topic, status, errorMessage, onStart, onSt
       </div>
       <h2 className="idle-heading">Ready to learn?</h2>
       <p className="idle-copy">
-        Your whiteboard is set up for <strong>{topic}</strong>. Click below to start our voice session.
+        {topic ? (
+          <>Your whiteboard is set up for <strong>{topic}</strong>. Click below to start our voice session.</>
+        ) : (
+          'Click below to start talking — the whiteboard fills in as we go.'
+        )}
       </p>
       {errorMessage && <p className="idle-error">{errorMessage}</p>}
       <MicButton status={status} onStart={onStart} onStop={onStop} />

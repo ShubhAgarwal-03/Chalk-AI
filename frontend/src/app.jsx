@@ -8,17 +8,22 @@ import CaptionDock from './components/CaptionDock.jsx';
 import { Radio } from 'lucide-react';
 import './styles/chalk.css';
 
-const TOPIC = 'Pythagorean Theorem';
-const LESSON_SUBTITLE = 'a² + b² = c²';
-
 export default function App() {
   const [elements, dispatchDraw] = useReducer(drawingReducer, undefined, initDrawingState);
   const [transcript, setTranscript] = useState([]);
+  const [topic, setTopic] = useState(null); // set live by the model's set_topic tool call
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [activePanel, setActivePanel] = useState('transcript');
   const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   const onDraw = useCallback((call) => {
+    // set_topic isn't a canvas element — it's a header label, so it's
+    // intercepted here rather than going into drawingReducer (which would
+    // just silently no-op on an unrecognized tool name).
+    if (call.name === 'set_topic') {
+      if (call.args?.topic) setTopic(call.args.topic);
+      return;
+    }
     dispatchDraw(call);
   }, []);
 
@@ -26,10 +31,11 @@ export default function App() {
     setTranscript((t) => [...t.slice(-49), { who, text }]);
   }, []);
 
-  const { status, errorMessage, start, stop } = useSession({ onDraw, onTranscript });
+  const { status, errorMessage, start, stop, muted, toggleMute } = useSession({ onDraw, onTranscript });
 
   const elapsed = useElapsedTimer(status === 'connected');
   const latestCaption = transcript[transcript.length - 1];
+  const isLive = status === 'connected' || status === 'connecting';
 
   const handleSelectPanel = (id) => {
     setActivePanel(id);
@@ -38,6 +44,11 @@ export default function App() {
 
   const handleClearCanvas = () => {
     dispatchDraw({ name: 'clear_canvas', args: {} });
+  };
+
+  const handleStart = () => {
+    setTopic(null); // fresh session — wait for the model's first set_topic call
+    start();
   };
 
   return (
@@ -51,20 +62,21 @@ export default function App() {
 
       <main className="chalk-main">
         <TopBar
-          topic={status === 'idle' || status === 'error' ? null : TOPIC}
+          topic={topic}
           elapsed={elapsed}
-          isTalking={status === 'connected'}
-          onStopTalking={stop}
+          live={isLive}
+          muted={muted}
+          onToggleMute={toggleMute}
           onEndSession={stop}
         />
 
         <CanvasCard
           elements={elements}
-          topic={TOPIC}
-          lessonSubtitle={LESSON_SUBTITLE}
+          topic={topic}
+          lessonSubtitle={null}
           status={status}
           errorMessage={errorMessage}
-          onStart={start}
+          onStart={handleStart}
           onStop={stop}
           onClearCanvas={handleClearCanvas}
           transcript={transcript}
@@ -93,7 +105,6 @@ export default function App() {
   );
 }
 
-/** Counts up mm:ss while `running` is true, resets when it goes false. */
 function useElapsedTimer(running) {
   const [seconds, setSeconds] = useState(0);
   const intervalRef = useRef(null);

@@ -7,16 +7,25 @@ const BACKEND_WS_URL = import.meta.env.VITE_BACKEND_WS_URL || 'ws://localhost:80
 export function useSession({ onDraw, onTranscript } = {}) {
   const [status, setStatus] = useState('idle');
   const [errorMessage, setErrorMessage] = useState(null);
+  const [muted, setMuted] = useState(false);
 
   const wsRef = useRef(null);
   const captureRef = useRef(null);
   const playbackRef = useRef(null);
   const acceptedGenerationRef = useRef(0); // frames tagged below this number are stale, drop them
+  // A manual, user-initiated mute — separate from the "no auto-mute while
+  // AI talks" decision in audioCapture.js. That comment is about never
+  // silencing the mic automatically (so barge-in keeps working); this is
+  // an explicit "Stop Talking" the student can toggle themselves. Capture
+  // stays running either way — we just gate whether chunks get sent.
+  const mutedRef = useRef(false);
 
   const start = useCallback(async () => {
     setStatus('connecting');
     setErrorMessage(null);
     acceptedGenerationRef.current = 0;
+    mutedRef.current = false;
+    setMuted(false);
 
     try {
       const ws = new WebSocket(BACKEND_WS_URL);
@@ -29,7 +38,7 @@ export function useSession({ onDraw, onTranscript } = {}) {
       ws.onopen = async () => {
         try {
           const capture = await startAudioCapture((chunk) => {
-            if (ws.readyState === WebSocket.OPEN) ws.send(chunk);
+            if (!mutedRef.current && ws.readyState === WebSocket.OPEN) ws.send(chunk);
           });
           captureRef.current = capture;
           setStatus('connected');
@@ -41,11 +50,6 @@ export function useSession({ onDraw, onTranscript } = {}) {
 
       ws.onmessage = (event) => {
         if (event.data instanceof ArrayBuffer) {
-          // First 4 bytes are a little-endian generation id the backend
-          // stamps on every audio frame (see backend/src/wsRelay.js). If
-          // this frame belongs to a response that's since been interrupted,
-          // its generation will be behind acceptedGenerationRef — drop it
-          // instead of playing stale audio over the real answer.
           const view = new DataView(event.data);
           const frameGeneration = view.getUint32(0, true);
           if (frameGeneration < acceptedGenerationRef.current) {
@@ -104,5 +108,10 @@ export function useSession({ onDraw, onTranscript } = {}) {
     setStatus('ended');
   }, []);
 
-  return { status, errorMessage, start, stop };
+  const toggleMute = useCallback(() => {
+    mutedRef.current = !mutedRef.current;
+    setMuted(mutedRef.current);
+  }, []);
+
+  return { status, errorMessage, start, stop, muted, toggleMute };
 }

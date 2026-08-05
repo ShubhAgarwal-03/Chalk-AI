@@ -1,11 +1,13 @@
-import { Clock, PhoneOff, MicOff, User } from 'lucide-react';
+import { Clock, PhoneOff, MicOff, Mic, User } from 'lucide-react';
 
 /**
- * `isTalking` toggles the extra "Stop Talking" control (image 2 in the
- * brief) — that's the mic/voice-turn toggle, separate from "End Session"
- * which tears down the whole WS session regardless of talk state.
+ * `live` is status === 'connected' | 'connecting' — while live, shows a
+ * real mute toggle (Stop Talking <-> Resume Talking) plus End Session as
+ * two genuinely different controls: muting just gates the outgoing audio
+ * (session, playback, and canvas stay alive), End Session tears the whole
+ * WS session down. See useSession.js's toggleMute for the muted side.
  */
-export default function TopBar({ topic, elapsed, isTalking, onStopTalking, onEndSession }) {
+export default function TopBar({ topic, elapsed, live, muted, onToggleMute, onEndSession }) {
   return (
     <header className="topbar">
       <div className="topbar-left">
@@ -25,17 +27,19 @@ export default function TopBar({ topic, elapsed, isTalking, onStopTalking, onEnd
           {elapsed}
         </span>
 
-        {isTalking && (
-          <button type="button" className="btn btn-danger" onClick={onStopTalking}>
-            <MicOff size={15} />
-            Stop Talking
+        {live && (
+          <button type="button" className={muted ? 'btn btn-outline' : 'btn btn-danger'} onClick={onToggleMute}>
+            {muted ? <Mic size={15} /> : <MicOff size={15} />}
+            {muted ? 'Resume Talking' : 'Stop Talking'}
           </button>
         )}
 
-        <button type="button" className="btn btn-outline" onClick={onEndSession}>
-          <PhoneOff size={15} />
-          End Session
-        </button>
+        {live && (
+          <button type="button" className="btn btn-outline" onClick={onEndSession}>
+            <PhoneOff size={15} />
+            End Session
+          </button>
+        )}
 
         <div className="avatar">
           <User size={17} />

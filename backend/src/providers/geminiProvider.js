@@ -33,6 +33,8 @@ export function createGeminiProvider() {
       // of hard-cutting it — recommended by Google for any session expected
       // to run more than a few minutes, which a tutoring session will.
       contextWindowCompression: { slidingWindow: {} },
+      inputAudioTranscription: {},
+      outputAudioTranscription: {},
       // Native VAD/barge-in is on by default — the student's mic staying
       // live is all that's needed for interruption to work; no config here.
     };
