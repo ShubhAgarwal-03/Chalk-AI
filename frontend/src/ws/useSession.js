@@ -4,23 +4,19 @@ import { createAudioPlayback } from '../audio/audioPlayback.js';
 
 const BACKEND_WS_URL = import.meta.env.VITE_BACKEND_WS_URL || 'ws://localhost:8080';
 
-/**
- * Owns the whole "session" lifecycle: opens the WS to the relay, starts
- * continuous mic capture, plays back incoming AI audio, and surfaces draw
- * instructions + transcript to whatever component wants them (App.jsx
- * today; Whiteboard.jsx once the real canvas replaces the log panel).
- */
 export function useSession({ onDraw, onTranscript } = {}) {
-  const [status, setStatus] = useState('idle'); // idle | connecting | connected | error | ended
+  const [status, setStatus] = useState('idle');
   const [errorMessage, setErrorMessage] = useState(null);
 
   const wsRef = useRef(null);
   const captureRef = useRef(null);
   const playbackRef = useRef(null);
+  const acceptedGenerationRef = useRef(0); // frames tagged below this number are stale, drop them
 
   const start = useCallback(async () => {
     setStatus('connecting');
     setErrorMessage(null);
+    acceptedGenerationRef.current = 0;
 
     try {
       const ws = new WebSocket(BACKEND_WS_URL);
@@ -45,7 +41,17 @@ export function useSession({ onDraw, onTranscript } = {}) {
 
       ws.onmessage = (event) => {
         if (event.data instanceof ArrayBuffer) {
-          playback.enqueueChunk(event.data);
+          // First 4 bytes are a little-endian generation id the backend
+          // stamps on every audio frame (see backend/src/wsRelay.js). If
+          // this frame belongs to a response that's since been interrupted,
+          // its generation will be behind acceptedGenerationRef — drop it
+          // instead of playing stale audio over the real answer.
+          const view = new DataView(event.data);
+          const frameGeneration = view.getUint32(0, true);
+          if (frameGeneration < acceptedGenerationRef.current) {
+            return;
+          }
+          playback.enqueueChunk(event.data.slice(4));
           return;
         }
 
@@ -58,6 +64,7 @@ export function useSession({ onDraw, onTranscript } = {}) {
             onTranscript?.(msg.who, msg.text);
             break;
           case 'interrupted':
+            acceptedGenerationRef.current = msg.generation;
             playback.clearQueue();
             break;
           case 'error':
@@ -65,6 +72,7 @@ export function useSession({ onDraw, onTranscript } = {}) {
             setStatus('error');
             break;
           case 'session_closed':
+            setErrorMessage((prev) => prev || `Session ended: ${msg.reason || 'no reason given'}`);
             setStatus('ended');
             break;
           default:

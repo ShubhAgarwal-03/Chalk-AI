@@ -8,6 +8,7 @@
  * always draws in this 1000x1000 logical space regardless of the
  * student's actual screen size; whiteboard.jsx scales it to fit.
  */
+
 export const CANVAS_UNITS = 1000;
 
 const initialState = {}; // { [id]: element }
@@ -15,7 +16,11 @@ const initialState = {}; // { [id]: element }
 export function drawingReducer(state, call) {
   switch (call.name) {
     case 'draw_shape':
+    case 'draw_path':
     case 'draw_line':
+    case 'draw_arc':
+    case 'draw_curve':
+    case 'draw_axes':
     case 'draw_arrow':
     case 'draw_label':
     case 'draw_equation': {

@@ -5,18 +5,6 @@ import { SYSTEM_PROMPT } from '../systemPrompt.js';
 /**
  * Real implementation of the provider contract (see providers/index.js) for
  * Gemini Live API. Reference: https://ai.google.dev/gemini-api/docs/live-api/get-started-sdk
- *
- * Notes on choices made here, worth revisiting:
- * - Model defaults to gemini-3.1-flash-live-preview (current as of the PRD's
- *   writing). It only supports SYNCHRONOUS function calling — meaning the
- *   model's turn pauses until we send a tool result. That's fine for us
- *   because our tool "work" (forwarding a draw instruction to the browser)
- *   is instant — we don't wait for the browser to finish rendering before
- *   replying, we just ack immediately. If you switch to
- *   gemini-2.5-flash-live-preview you also get NON_BLOCKING/async tool
- *   calls, which isn't needed here but is available.
- * - responseModalities is AUDIO only — we don't need text output, the
- *   audio itself + tool calls are the whole product.
  */
 export function createGeminiProvider() {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -34,11 +22,17 @@ export function createGeminiProvider() {
     parameters: t.parameters,
   }));
 
-  async function connect({ onAudioChunk, onToolCall, onTranscript, onClose, onError }) {
+  async function connect({ onAudioChunk, onToolCall, onTranscript, onInterrupted, onClose, onError }) {
     const config = {
       responseModalities: [Modality.AUDIO],
       systemInstruction: SYSTEM_PROMPT,
       tools: [{ functionDeclarations }],
+      // Without this, long sessions hit Gemini's context window limit and
+      // the connection just closes with little warning. This lets the
+      // server compress/trim older turns to keep the session going instead
+      // of hard-cutting it — recommended by Google for any session expected
+      // to run more than a few minutes, which a tutoring session will.
+      contextWindowCompression: { slidingWindow: {} },
       // Native VAD/barge-in is on by default — the student's mic staying
       // live is all that's needed for interruption to work; no config here.
     };
@@ -65,6 +59,14 @@ export function createGeminiProvider() {
     function handleMessage(message) {
       const content = message.serverContent;
 
+      // Fires when the student's speech interrupted the AI mid-response
+      // (native barge-in detection). The browser must stop playing any
+      // already-buffered audio right away, or stale speech overlaps the
+      // student talking.
+      if (content?.interrupted) {
+        onInterrupted?.();
+      }
+
       if (content?.modelTurn?.parts) {
         for (const part of content.modelTurn.parts) {
           if (part.inlineData?.data) {
@@ -84,6 +86,20 @@ export function createGeminiProvider() {
         for (const fc of message.toolCall.functionCalls) {
           onToolCall?.({ id: fc.id, name: fc.name, args: fc.args || {} });
         }
+      }
+
+      // Gemini sends this shortly before it force-closes the connection
+      // (session/context limits) — surfacing it turns "the app silently
+      // died" into a legible warning instead.
+      if (message.goAway) {
+        const secondsLeft = message.goAway.timeLeft ? Math.round(Number(message.goAway.timeLeft.replace('s', ''))) : null;
+        onError?.(
+          new Error(
+            secondsLeft
+              ? `Session will be closed by the server in ~${secondsLeft}s (Gemini Live session limit). Consider wrapping up.`
+              : 'Session will be closed by the server soon (Gemini Live session limit).'
+          )
+        );
       }
     }
 
