@@ -12,13 +12,17 @@ export function useSession({ onDraw, onTranscript } = {}) {
   const wsRef = useRef(null);
   const captureRef = useRef(null);
   const playbackRef = useRef(null);
-  const acceptedGenerationRef = useRef(0); // frames tagged below this number are stale, drop them
-  // A manual, user-initiated mute — separate from the "no auto-mute while
-  // AI talks" decision in audioCapture.js. That comment is about never
-  // silencing the mic automatically (so barge-in keeps working); this is
-  // an explicit "Stop Talking" the student can toggle themselves. Capture
-  // stays running either way — we just gate whether chunks get sent.
+  const acceptedGenerationRef = useRef(0);
   const mutedRef = useRef(false);
+  // Timers for AI captions delayed to match audio playback (see the
+  // 'transcript' case below) — tracked so a barge-in or session end can
+  // cancel any not-yet-shown ones instead of letting them pop up late.
+  const pendingCaptionTimeoutsRef = useRef([]);
+
+  const clearPendingCaptions = () => {
+    pendingCaptionTimeoutsRef.current.forEach(clearTimeout);
+    pendingCaptionTimeoutsRef.current = [];
+  };
 
   const start = useCallback(async () => {
     setStatus('connecting');
@@ -26,6 +30,7 @@ export function useSession({ onDraw, onTranscript } = {}) {
     acceptedGenerationRef.current = 0;
     mutedRef.current = false;
     setMuted(false);
+    clearPendingCaptions();
 
     try {
       const ws = new WebSocket(BACKEND_WS_URL);
@@ -65,11 +70,28 @@ export function useSession({ onDraw, onTranscript } = {}) {
             onDraw?.(msg.call);
             break;
           case 'transcript':
-            onTranscript?.(msg.who, msg.text);
+            if (msg.who === 'ai') {
+              // Delay the AI's caption by however far the audio queue is
+              // currently running ahead of real-time, so the sentence
+              // appears roughly when it's actually heard, not the instant
+              // the WS message arrives (which can be well before the
+              // matching audio is scheduled to play).
+              const delayMs = playback.getPendingDelayMs();
+              if (delayMs > 30) {
+                const timeoutId = setTimeout(() => onTranscript?.(msg.who, msg.text), delayMs);
+                pendingCaptionTimeoutsRef.current.push(timeoutId);
+              } else {
+                onTranscript?.(msg.who, msg.text);
+              }
+            } else {
+              // Student's own words — show immediately, nothing to sync against.
+              onTranscript?.(msg.who, msg.text);
+            }
             break;
           case 'interrupted':
             acceptedGenerationRef.current = msg.generation;
             playback.clearQueue();
+            clearPendingCaptions();
             break;
           case 'error':
             setErrorMessage(msg.message);
@@ -105,6 +127,7 @@ export function useSession({ onDraw, onTranscript } = {}) {
     wsRef.current?.close();
     captureRef.current?.stop();
     playbackRef.current?.close();
+    clearPendingCaptions();
     setStatus('ended');
   }, []);
 

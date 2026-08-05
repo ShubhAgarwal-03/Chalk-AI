@@ -15,6 +15,10 @@ export function createAudioPlayback() {
   let nextStartTime = 0;
   let activeSources = [];
 
+  function getPendingDelayMs() {
+    return Math.max(0, (nextStartTime - audioContext.currentTime) * 1000);
+  }
+
   function enqueueChunk(arrayBuffer) {
     const pcm16 = new Int16Array(arrayBuffer);
     const float32 = new Float32Array(pcm16.length);
@@ -57,5 +61,5 @@ export function createAudioPlayback() {
     audioContext.close();
   }
 
-  return { enqueueChunk, clearQueue, close };
+  return { enqueueChunk, clearQueue, close, getPendingDelayMs };
 }

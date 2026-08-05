@@ -4,7 +4,7 @@ import { drawingReducer, initDrawingState } from './canvas/drawingReducer.js';
 import Sidebar from './components/Sidebar.jsx';
 import TopBar from './components/TopBar.jsx';
 import CanvasCard from './components/CanvasCard.jsx';
-import CaptionDock from './components/CaptionDock.jsx';
+import CaptionDock from './components/captionDoc.jsx';
 import { Radio } from 'lucide-react';
 import './styles/chalk.css';
 
