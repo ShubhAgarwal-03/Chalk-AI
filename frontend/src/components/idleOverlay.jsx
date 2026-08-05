@@ -1,5 +1,5 @@
 import { PencilLine } from 'lucide-react';
-import MicButton from './MicButton.jsx';
+import MicButton from './micButton.jsx';
 
 export default function IdleOverlay({ topic, status, errorMessage, onStart, onStop }) {
   return (
